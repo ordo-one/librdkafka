@@ -948,6 +948,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request0(rd_kafka_broker_t *rkb,
 #define rd_kafka_buf_new_flexver_request(rkb, ApiKey, segcnt, size,            \
                                          is_flexver)                           \
         rd_kafka_buf_new_request0(rkb, ApiKey, segcnt, size, is_flexver)
+void rd_kafka_buf_upgrade_flexver_request(rd_kafka_buf_t *rkbuf);
 
 rd_kafka_buf_t *
 rd_kafka_buf_new_shadow(const void *ptr, size_t size, void (*free_cb)(void *));
@@ -1454,7 +1455,7 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
         } while (0)
 
 static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
-                                              rd_kafka_uuid_t *uuid) {
+                                              rd_kafka_Uuid_t *uuid) {
         rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
         rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
 }

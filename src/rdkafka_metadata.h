@@ -54,7 +54,7 @@ typedef struct rd_kafka_metadata_topic_internal_s {
          *  same count as metadata.topics[i].partition_cnt.
          *  Sorted by Partition Id. */
         rd_kafka_metadata_partition_internal_t *partitions;
-        rd_kafka_uuid_t topic_id;
+        rd_kafka_Uuid_t topic_id;
         int32_t topic_authorized_operations; /**< ACL operations allowed
                                               * for topic, -1 if not
                                               * supported by broker */
@@ -268,6 +268,7 @@ struct rd_kafka_metadata_cache {
 
 
 
+int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic);
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
 int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
 void rd_kafka_metadata_cache_topic_update(
