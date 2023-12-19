@@ -135,6 +135,9 @@ static rd_kafka_t *create_transactional_producer(const char *brokers,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK ||
             rd_kafka_conf_set(conf, "transactional.id",
                               "librdkafka_transactions_example", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+            rd_kafka_conf_set(conf, "debug",
+                              "all", errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK)
                 fatal("Failed to configure producer: %s", errstr);
 
@@ -597,6 +600,8 @@ int main(int argc, char **argv) {
         signal(SIGINT, stop);
 
         producer = create_transactional_producer(brokers, output_topic);
+
+        sleep(3 * 60); // 3 mins
 
         consumer = create_input_consumer(brokers, input_topic, producer);
 
