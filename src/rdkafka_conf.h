@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -164,7 +165,7 @@ typedef enum {
 } rd_kafka_client_dns_lookup_t;
 
 typedef enum {
-        RD_KAFKA_GROUP_PROTOCOL_GENERIC,
+        RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
         RD_KAFKA_GROUP_PROTOCOL_CONSUMER,
 } rd_kafka_group_protocol_t;
 
@@ -353,6 +354,7 @@ struct rd_kafka_conf_s {
         /* Client group configuration */
         int coord_query_intvl_ms;
         int max_poll_interval_ms;
+        int enable_metrics_push;
 
         int builtin_features;
         /*
@@ -386,6 +388,7 @@ struct rd_kafka_conf_s {
         rd_kafkap_str_t *group_protocol_type;
         char *partition_assignment_strategy;
         rd_list_t partition_assignors;
+        rd_bool_t partition_assignors_cooperative;
         int enabled_assignor_cnt;
 
         void (*rebalance_cb)(rd_kafka_t *rk,
