@@ -484,19 +484,22 @@ rd_kafka_admin_coord_request(rd_kafka_broker_t *rkb,
         rd_kafka_resp_err_t err;
 
 
+        /* Take the response source before dropping the request source:
+         * any error returned here makes rd_kafka_coord_req_fail() call
+         * rd_kafka_admin_coord_response_parse(), which drops it, so the
+         * eonce must still be alive then. */
+        rd_kafka_enq_once_add_source(eonce, "coordinator response");
+
         rko = rd_kafka_enq_once_del_source_return(eonce, "coordinator request");
         if (!rko)
                 /* Admin request has timed out and been destroyed */
                 return RD_KAFKA_RESP_ERR__DESTROY;
-
-        rd_kafka_enq_once_add_source(eonce, "coordinator response");
 
         err = rko->rko_u.admin_request.cbs->request(
             rkb, &rko->rko_u.admin_request.args,
             &rko->rko_u.admin_request.options, errstr, sizeof(errstr), replyq,
             rd_kafka_admin_handle_response, eonce);
         if (err) {
-                rd_kafka_enq_once_del_source(eonce, "coordinator response");
                 rd_kafka_admin_result_fail(
                     rko, err, "%s worker failed to send request: %s",
                     rd_kafka_op2str(rko->rko_type), errstr);

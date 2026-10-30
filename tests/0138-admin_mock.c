@@ -268,6 +268,111 @@ static void do_test_ListOffsets_leader_change(void) {
         test_mock_cluster_destroy(mcluster);
 }
 
+/**
+ * @brief A coordinator admin request that times out while its coordinator
+ *        is down must not crash when the coordinator comes back up and the
+ *        lingering coordinator request is finally sent.
+ */
+static void do_test_ListConsumerGroupOffsets_coordinator_down_timeout(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_queue_t *q;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets;
+        const rd_kafka_ListConsumerGroupOffsets_result_t *res;
+        const rd_kafka_group_result_t **gres;
+        size_t gres_cnt;
+        char errstr[512];
+        const char *bootstraps;
+        const char *topic                = "test";
+        const char *group_id             = topic;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev           = NULL;
+        rd_kafka_resp_err_t err;
+        rd_bool_t coordinator_contacted = rd_false;
+        int i;
+
+        SUB_TEST_QUICK();
+
+        test_conf_init(&conf, NULL, 60);
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        rd_kafka_mock_coordinator_set(mcluster, "group", group_id, 2);
+        rd_kafka_mock_broker_set_down(mcluster, 2);
+
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        q  = rd_kafka_queue_get_main(rk);
+
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS);
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 1000, errstr, sizeof(errstr)));
+
+        cgoffsets = rd_kafka_ListConsumerGroupOffsets_new(group_id, NULL);
+        rd_kafka_ListConsumerGroupOffsets(rk, &cgoffsets, 1, options, q);
+        rd_kafka_ListConsumerGroupOffsets_destroy(cgoffsets);
+
+        for (i = 0; i < 10; i++) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(10 * 1000));
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT)
+                        break;
+                rd_kafka_event_destroy(rkev);
+                rkev = NULL;
+        }
+        TEST_ASSERT(rkev, "no ListConsumerGroupOffsets result");
+
+        res = rd_kafka_event_ListConsumerGroupOffsets_result(rkev);
+        TEST_ASSERT(res, "expected ListConsumerGroupOffsets_result, not %s",
+                    rd_kafka_event_name(rkev));
+        err = rd_kafka_event_error(rkev);
+        if (!err) {
+                gres = rd_kafka_ListConsumerGroupOffsets_result_groups(
+                    res, &gres_cnt);
+                TEST_ASSERT(gres && gres_cnt == 1,
+                            "expected gres_cnt == 1, not %" PRIusz, gres_cnt);
+                err = rd_kafka_error_code(rd_kafka_group_result_error(gres[0]));
+        }
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected request to time out, not %s",
+                    rd_kafka_err2name(err));
+        rd_kafka_event_destroy(rkev);
+
+        /* The coordinator request outlives the admin request: once the
+         * client is talking to the restored coordinator, the request is
+         * sent and its failure handled. */
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_mock_broker_set_up(mcluster, 2);
+        for (i = 0; !coordinator_contacted && i < 100; i++) {
+                rd_kafka_mock_request_t **requests;
+                size_t request_cnt, j;
+
+                rd_usleep(tmout_multip(100) * 1000, NULL);
+                requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
+                for (j = 0; j < request_cnt; j++) {
+                        if (rd_kafka_mock_request_id(requests[j]) == 2)
+                                coordinator_contacted = rd_true;
+                        rd_kafka_mock_request_destroy(requests[j]);
+                }
+                rd_free(requests);
+        }
+        TEST_ASSERT(coordinator_contacted,
+                    "client never reconnected to the coordinator");
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_usleep(tmout_multip(1000) * 1000, NULL);
+
+        rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_queue_destroy(q);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0138_admin_mock(int argc, char **argv) {
 
         if (test_needs_auth()) {
@@ -279,6 +384,8 @@ int main_0138_admin_mock(int argc, char **argv) {
         do_test_AlterConsumerGroupOffsets_errors(1000);
 
         do_test_ListOffsets_leader_change();
+
+        do_test_ListConsumerGroupOffsets_coordinator_down_timeout();
 
         return 0;
 }
